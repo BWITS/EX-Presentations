@@ -1,0 +1,510 @@
+Coding Guidelines and Practices
+Contains JavaScript
+18 Aug 2016
+Tags: javascript, nodejs, practices
+
+Georges Haidar
+Development Lead, MYOB
+georges.haidar@myob.com
+https://github.com/disintegrator
+@ghaidar0
+
+* Preface
+
+We write a lot of JavaScript at MYOB.
+
+If the average file size is 100 lines then we are approaching ~4M lines of code
+ ...and if we follow statistic of 15-30 bugs per 10k lines of code we get:
+*6000-12000*bugs*in*the*best*case*
+
+Note that this does not account for third party code (just our own).
+
+* Preface
+
+So we must mitigate with:
+
+- *Guidelines*
+- Design
+- Tests
+- CI/CD
+
+* Preface: Guidelines
+
+The idea behind guidelines is to have developers:
+
+- Design and build systems that are easy to comprehend
+- Write code in _one_voice_ that is easy to extend and evolve
+- Overall, codify and propagate best practices
+
+* There is a theme here...
+
+* RISK
+
+It is at the centre of all of this
+
+Every design decision and every line of code change the risk profile of our
+systems. Therefore good guidelines, that drive good design and code, observe
+risk and allow mitigation.
+
+Good design and code improve: *testability*, *maintainability*, *extensibility*
+
+* python -c 'import this'
+
+  Beautiful is better than ugly.
+  Explicit is better than implicit.
+  Simple is better than complex.
+  Complex is better than complicated.
+  Flat is better than nested.
+  Sparse is better than dense.
+  Readability counts.
+  Special cases aren't special enough to break the rules.
+  Although practicality beats purity.
+  Errors should never pass silently.
+  Unless explicitly silenced.
+  In the face of ambiguity, refuse the temptation to guess.
+  There should be one-- and preferably only one --obvious way to do it.
+  Although that way may not be obvious at first unless you're Dutch.
+  Now is better than never.
+  Although never is often better than *right* now.
+  If the implementation is hard to explain, it's a bad idea.
+  If the implementation is easy to explain, it may be a good idea.
+  Namespaces are one honking great idea -- let's do more of those!
+
+* Some coding guidelines
+
+* Line length, line count and names
+
+The following are desirable qualities of clean code:
+
+- *Keep*your*lines*short*
+Aim for something around 80 characters max. This has nothing to do with small
+screens or unwieldy editors. It is an exercise in terseness and readability.
+
+- *Keep*your*functions*small*
+Aim for something around 10 lines of code if possible. It will encourage to
+think about your design.
+
+- *Use*clear*names*for*modules,*variables,*classes*and*functions*
+There is no reason to use unclear names or unnecessary abbreviations to save
+on characters. We all use IDEs and editors with code completion. However,
+abbreviations are acceptable where there are established conventions.
+
+* Line length, line count and names
+
+.image ./atom.png _ 900
+
+* Design clean functions
+
+- Clean functions have short signature
+
+Functions with no arguments are the easiest to use and test, followed by
+functions with 1 argument, then 2 arguments and so on...  If a function takes 3
+or more aguments, it becomes unintuitive
+
+* Design clean functions
+
+- Clean function arguments must be related (cohesive) and, as a result, help document the function
+
+  // BAD
+  // this function does everything
+  module.exports = function(sbrLodgementApiClient, returnsRepo, lodgementStatusChecker, sbrFormsApiClient, auditRepo, returnHelper) {}
+
+  // GOOD
+  // You are more likely to infer that this function updates an employee
+  // identified by `id` using an attributes object
+  function updateEmployee(id, attributes) {}
+
+* Design clean functions
+
+- Clean functions do not use ambiguous arguments
+
+The options arguments forces developers to write documentation and comments. A
+small change such as using the destructuring syntax eliminates the need to
+document the function
+
+  // BAD
+  function Button(options) { /* ... */ }
+  // GREAT - Destructuring reveals the parameters this function accepts
+  function Button({type, label}) { /* ... */ }
+  // ALSO GREAT
+  function SubmitButton(label) { /* ... */ }
+
+* Design clean functions
+
+- Clean functions [[http://blog.codinghorror.com/avoiding-booleans/][do not take boolean arguments]] or magic numbers
+
+  // BAD - Can you determine what true and false mean?
+  updateReturnStatus(id, true)
+  updateReturnStatus(id, false)
+  // BAD - Can you determine what the numbers mean
+  updateReturnStatus(id, 0)
+  updateReturnStatus(id, 3)
+  updateReturnStatus(id, 2)
+  // GREAT
+  updateReturnStatus(id, Return.STATUS_LODGED)
+  updateReturnStatus(id, 'rejected')
+
+* Design clean functions
+
+- Clean functions do not accept `null` arguments
+
+  // BAD
+  sendEmail('john@gmail.com', null, null, 'Hello', 'How are you today?')
+
+* Avoid control structures or minimise their bodies and clauses
+
+This is a very interesting discipline to follow because it forces you to think
+about functions and functional programming at every corner.
+
+* Avoid control structures or minimise their bodies and clauses
+
+  function getConcessionDueDate(asType, asDueDate, asStartDate, asEndDate) {
+    const asYear = moment(asStartDate).year();
+    const asQuarter = moment(asStartDate).quarter();
+    const asMonth = moment(asStartDate).month();
+    let currDate = moment.utc(new Date()).format('YYYY-MM-DD');
+    let concessionDueDate = asDueDate;
+
+    if (asType && asDueDate && isFormEligibleForConcession(asType)) { // <- branching
+      currDate = moment(currDate);  // <- conditionally setting a variable in the middle of other logic
+      if (isQuarterlyAS(asStartDate, asEndDate)) {  // <- one more branch to track in your brain
+        const quarterlyDate = concessionDueDates.quarterly[asYear] && concessionDueDates.quarterly[asYear][asQuarter] && moment(concessionDueDates.quarterly[asYear][asQuarter]);
+        if (quarterlyDate && (quarterlyDate.isAfter(currDate) || quarterlyDate.isSame(currDate))) { <- AND another
+          concessionDueDate = concessionDueDates.quarterly[asYear][asQuarter];
+        }
+      } else if (isMonthlyAS(asStartDate, asEndDate)) { // <- a wild else-if appears! So it seems like there are more than 2 possible branches
+        const monthlyDate = concessionDueDates.monthly[asYear] && concessionDueDates.monthly[asYear][asMonth] && moment(concessionDueDates.monthly[asYear][asMonth]);
+        if (monthlyDate && (monthlyDate.isAfter(currDate) || monthlyDate.isSame(currDate))) {
+          concessionDueDate = concessionDueDates.monthly[asYear][asMonth];
+        }
+      }
+    }
+    return concessionDueDate;
+  }
+
+* Avoid control structures or minimise their bodies and clauses
+
+This example is a smaller function but presents another issue: complex if-clauses.  It is very hard to grasp the various outcomes when there are multiple terms in a boolean expression. Usually a long `if` clause is a code smell and needs to be reconsidered.
+
+  function getBoolean(doc, fieldId) {
+    if (doc.fields[fieldId]
+      && doc.fields[fieldId].value
+      && typeof doc.fields[fieldId].value === 'boolean') {
+
+      return doc.fields[fieldId].value;
+    }
+
+    if (doc.fields[fieldId]
+      && doc.fields[fieldId].value
+      && typeof doc.fields[fieldId].value === 'string'
+      && doc.fields[fieldId].value.toLowerCase().trim() === 'true') {
+
+      return true;
+    }
+    return false;
+  }
+
+* Avoid control structures or minimise their bodies and clauses
+
+We can clean this up with some tools at our disposal:
+
+  import _ from 'lodash';
+
+  const parseBoolean = _.flow([_.trim, _.lowerCase, v => v === 'true']);
+
+  function getBoolean(doc, fieldId) {
+    const val = _.get(doc, `fields.${fieldId}.value`);
+    const options = {
+      boolean: () => val,
+      string: () => parseBoolean(val),
+    }
+    return _.result(options, typeof val, false);
+  }
+
+- We have very short and readable lines
+- There is now only one return statement i.e. only one exit out of the function
+- We are using the `options` object as a switch statement which collects the clauses and results close to each other
+
+: This jump from the first version is not always obvious and for many developers it is sometimes useful to write the first version then take a second attempt at improving it towards something similar to the second version.
+: The point is reading code is a form of running it in your brain.  You have a javascript interpreter in your head!
+
+* Avoid control structures or minimise their bodies and clauses
+
+Every time you see a branch statement you have to maintain that knowledge in your mind while reading the code. As more branching statements and loop structures appear this becomes much harder.
+
+Here are some suggestions to prevent this:
+
+- Do not use branch and looping control structures ever. Think about other ways that keep the code flat and achieve your goal.
+- If you must use a looping structure, its body must be _around_ one line of code. Consider ternary statements for example.
+- If you cannot satisfy the previous two rules, stop and go back to the drawing board. There is definitely a simpler solution.
+
+* Asynchronous logic: Callbacks and Promises
+
+Avoid nesting async functions like so:
+
+  app.post('/api/orders', (req, res) => {
+    const pid = _.get(req.body, 'productId');
+    const query = { _id: pid, stock: { $gt: 0 } };
+    const update = { stock: { $inc: -1 } };
+
+    db.products.update(query, update, (err, report) => {
+      if (err) { throw err; }
+      if (report.updated > 0) {
+        return res.status(422).json({ message: 'Product not found or out of stock' });
+      }
+      const doc = { user: req.user.id, product: pid, status: 'created', quantity: 4, unitPrice: 1200 };
+      db.orders.create(doc, (err, order) => {
+        paymentProcessor.charge(order, (err, receipt) => {
+          if (err) { throw err; }
+          db.orders.update(
+            {_id: order.id},
+            {status: 'processed', processorResponse: receipt},
+            (err, updated) => {
+              res.status(204).send();
+            });
+        });
+      });
+    });
+  });
+
+: This is contrived example but it is not too far from reality. If you have two or more nested async functions, you are a victim of callback hell. Code begins to go sideways and the lifetime of async functions becomes difficult to remember.
+
+* Asynchronous logic: Callbacks and Promises
+
+Consider using promises to flatten chains of callbacks. Here is another take on
+the previous example:
+
+  app.post('/api/orders', (req, res) => {
+    const pid = _.get(req.body, 'productId')
+    const query = {_id: pid, stock: {$gt: 0}}
+    const update = {stock: {$inc: -1}}
+
+    db.products.update(query, update)
+      .then(report => {
+        if (report.updated > 0) {
+          return Promise.reject(new HTTP422('Product not found or out of stock'))
+        }
+        const doc = { user: req.user.id, product: pid, status: 'created', quantity: 4, unitPrice: 1200 }
+        return db.orders.create(doc)
+      })
+      .then(order => paymentProcessor.charge(order))
+      .then(receipt => db.orders.update({_id: order.id}, {status: 'processed', processorResponse: receipt})),
+      .then(() => res.status(204).send())
+      .catch(err => {
+        if (err instanceof HTTPError) { return res.status(err.status).json({message: err.message}) }
+        else { throw err }
+      })
+  })
+
+* Quick tangent on Big O notation
+
+It is very important to understand how your functions perform when they over operate on lists. Big O helps us understand the complexity of a function that operates on a list.
+
+  O(1)  Example:
+    function first(employees) { return employee[1]; }
+  O(n)  Example:
+    function printNames(employees) {
+      employees.forEach(employee => console.log(employee.firstName));
+    }
+  O(n^2) Example:
+    function containsDuplicates(list) {
+      let result = false
+      list.forEach((candidate, i) => {
+        list.forEach((other, n) => {
+          if (i === n) { return; }
+          result = result || candidate === other;
+        }
+      })
+      return result;
+    }
+
+* Quick tangent on Big O notation
+
+.image ./bigo.png _ 800
+
+* Techniques
+
+  Array.prototype.map
+  Array.prototype.reduce
+  Array.prototype.filter
+  Array.prototype.forEach
+  Array.prototype.join
+  Array.prototype.concat
+
+These are six of the most important array functions you must understand. Using
+them saves you from using error prone conditional and looping statements such
+as if, for and while.
+
+Remember that each of these functions has O(n) complexity in the best case.
+That is, the time it takes each to complete is directly proportional to the size
+of the array.  Unlike the control structures we are trying to avoid using, you
+cannot break early from these functions.
+
+* Techniques: Array.prototype.filter
+
+  // select truth-y values from an array
+  [1, '', null, 'hello', 0, false, true].filter(Boolean)
+  // -> [1, 'hello', true]
+
+  // select only lodged tax returns (taxReturns is an array)
+  taxReturns.filter({status} => status === 'lodged')
+
+* Techniques: Array.prototype.map
+
+  // generate React elements from an array
+  function Todos(props) {
+    const {todos} = props
+    return (
+      <ul>
+        {todos.map(({id, text}) => <li key={id}>{text}</li>)
+      </ul>
+    )
+  }
+
+* Techniques: Array.prototype.reduce
+
+  // Group an array of objects by some key
+  const availableReturns = [
+    {id: '12134', type: 'bas', client: {id: '9031', name: 'John Doe'}},
+    {id: '12134', type: 'fbt-2016', client: {id: '9031', name: 'John Doe'}},
+    {id: '12134', type: 'fbt-2015', client: {id: '9031', name: 'John Doe'}},
+    {id: '12134', type: 'ctr-2016', client: {id: '1044', name: 'Apple Inc'}},
+    {id: '12134', type: 'bas', client: {id: '2291', name: 'Quick Plumbing'}},
+    {id: '12134', type: 'fbt-2016', client: {id: '2291', name: 'Quick Plumbing'}}
+  ]
+
+  const returnsByClient = availableReturns.reduce((acc, taxReturn) => {
+    const entries = acc[taxReturn.client.id] || []
+    entries.push(taxReturn)
+    acc[taxReturn.client.id] = entries
+    return acc
+  }, {})
+
+  console.log(JSON.stringify(returnsByClient, null, 2))
+
+* Techniques: Array.prototype.reduce
+
+  // ->
+  {
+    "9031": [
+      {
+        "id": "12134",
+        "type": "bas",
+        "client": {
+          "id": "9031",
+          "name": "John Doe"
+        }
+      },
+      {
+        "id": "12134",
+        "type": "fbt-2016",
+        "client": {
+          "id": "9031",
+          "name": "John Doe"
+        }
+      },
+      {
+        "id": "12134",
+        "type": "fbt-2015",
+        "client": {
+          "id": "9031",
+          "name": "John Doe"
+        }
+      }
+    ],
+    "1044": [
+      {
+        "id": "12134",
+        "type": "ctr-2016",
+        "client": {
+          "id": "1044",
+          "name": "Apple Inc"
+        }
+      }
+    ],
+    "2291": [
+      {
+        "id": "12134",
+        "type": "bas",
+        "client": {
+          "id": "2291",
+          "name": "Quick Plumbing"
+        }
+      },
+      {
+        "id": "12134",
+        "type": "fbt-2016",
+        "client": {
+          "id": "2291",
+          "name": "Quick Plumbing"
+        }
+      }
+    ]
+  }
+
+* Techniques: Array.prototype.join
+
+  const {firstName, middleName, lastName} = {firstName: 'John', middleName: '', lastName: 'Smith'}
+  const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ')
+
+* Techniques: Array.prototype.concat
+
+  const myFriends = ['John', 'Emily', 'Jane']
+  const yourFriends = ['Andrew', 'Samantha']
+
+  // start with an empty list and add both our friends into it
+  const ourFriends = [].concat(myFriends, yourFriends)
+
+: Focusing on arrays because most of programming is manipulation of lists
+: Do yourself a favour and read up on all of the different methods for arrays
+
+* Bonus: Switch using hash (aka object, map, dictionary)
+
+  const _ = require('lodash')
+
+  const sounds = {
+    dog: () => 'woof',
+    cat: () => 'meow',
+    cow: () => 'moo',
+  }
+
+  _.result(sounds, 'cat', 'Huh?')
+
+* Bonus: Swap CPU for memory
+
+  const _ = require('lodash')
+
+  const tasks = [
+    {id: 1, name: 'learn js', completed: true},
+    {id: 2, name: 'start open source project', completed: true},
+    {id: 3, name: 'publish npm package', completed: true},
+    {id: 4, name: 'update cv', completed: false}
+  ]
+
+  // OK
+  function toggleTaskCompletion(id) {
+    for (let i = 0; i < tasks.length; i++) { // O(n)
+      let task = tasks[i]
+      if (task.id === id) {
+        task.completed = true
+        return
+      }
+    }
+  }
+
+  // BETTER
+  const tasksById = _.indexBy(tasks, 'id')
+
+  function toggleTaskCompletionImproved(id) {
+    const task = tasksById[id]  // O(1)
+    if (!task) { return }
+    task.completed = true
+  }
+
+* Finally
+
+One of the best ways to pick techniques up is to first know what functions you have to apply to lists and objects. These are important documents:
+
+- [[https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array][Array]]
+- [[https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object][Object]]
+- [[https://lodash.com/docs][Lodash]]
